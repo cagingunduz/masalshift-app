@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Masal Shift Manager",
+    "slug": "masalshift",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#060606"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.masalshift.app",
+      "buildNumber": "1"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#060606"
+      },
+      "package": "com.masalshift.app",
+      "versionCode": 1
+    },
+    "extra": {
+      "eas": {
+        "projectId": "0bdeddd5-ac9b-427e-9a45-acb2c258acb9"
+      }
+    },
+    "owner": "cagingndz"
+  }
+}
