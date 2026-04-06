@@ -1,3 +1,4 @@
+import './lib/urlPolyfill';
 import { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, TextInput,
