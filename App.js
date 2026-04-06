@@ -388,7 +388,7 @@ function AdminHome({sched,selDay,setSelDay,gs,avail,staff,addShift,delShift,updS
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false}
-        style={{marginTop:16}} contentContainerStyle={{paddingHorizontal:20,gap:7}}>
+        style={{marginTop:10,flexGrow:0}} contentContainerStyle={{paddingHorizontal:20,gap:7}}>
         {DAYS_S.map((d,i) => {
           const isSel=i===selDay, isToday=weekOffset===0&&i===TODAY_IDX;
           const cnt=(sched[i]||[]).reduce((a,s)=>a+s.staffIds.length,0);
@@ -413,7 +413,7 @@ function AdminHome({sched,selDay,setSelDay,gs,avail,staff,addShift,delShift,updS
         })}
       </ScrollView>
 
-      <View style={{flexDirection:'row',gap:8,paddingHorizontal:20,marginTop:12}}>
+      <View style={{flexDirection:'row',gap:8,paddingHorizontal:20,marginTop:8}}>
         {[{l:'Vardiya',v:dayShifts.length},{l:'Çalışan',v:headcount}].map(({l,v})=>(
           <View key={l} style={{flex:1,backgroundColor:T.s2,borderRadius:14,padding:12,borderWidth:1,borderColor:T.b}}>
             <Text style={{color:T.ts,fontSize:10,letterSpacing:0.5,textTransform:'uppercase'}}>{l}</Text>
