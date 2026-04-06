@@ -895,9 +895,11 @@ function HoursView({staff, sched, weekStart}) {
     if (period !== 'monthly') return;
     setFetching(true);
     const now = new Date();
-    const todayStr = now.toISOString().slice(0,10);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
-    const monthEnd   = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().slice(0,10);
+    const pad = n => String(n).padStart(2,'0');
+    const localToday = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+    const monthStart = `${now.getFullYear()}-${pad(now.getMonth()+1)}-01`;
+    const lastDay = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+    const monthEnd = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(lastDay)}`;
     supabase
       .from('shifts')
       .select('week_start,day_index,start_time,end_time,shift_assignments(staff_id)')
@@ -906,13 +908,13 @@ function HoursView({staff, sched, weekStart}) {
       .then(({data}) => {
         const map = {};
         (data||[]).forEach(sh => {
-          // Vardiyının gerçek tarihi
-          const d = new Date(sh.week_start);
+          // Yerel saatle gerçek tarih hesapla (T12:00 ile UTC kaymasını önle)
+          const d = new Date(sh.week_start + 'T12:00:00');
           d.setDate(d.getDate() + sh.day_index);
-          const shiftDate = d.toISOString().slice(0,10);
+          const shiftDate = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
           const ended =
-            shiftDate < todayStr ||
-            (shiftDate === todayStr && toMins(sh.end_time) <= nowMins());
+            shiftDate < localToday ||
+            (shiftDate === localToday && toMins(sh.end_time) <= nowMins());
           if (!ended) return;
           const mins = diff(sh.start_time, sh.end_time);
           (sh.shift_assignments||[]).forEach(a => {
