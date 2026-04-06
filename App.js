@@ -869,33 +869,51 @@ function HoursView({staff, sched, weekStart}) {
     return m>0 ? `${h}s ${m}dk` : `${h}s`;
   };
 
-  // Haftalık: mevcut sched verisinden
-  const weeklyMins = staffId =>
-    Object.values(sched).flat()
-      .filter(sh=>sh.staffIds.includes(staffId))
-      .reduce((acc,sh)=>acc+diff(sh.start,sh.end),0);
+  const nowMins = () => { const n=new Date(); return n.getHours()*60+n.getMinutes(); };
 
-  // Günlük: sadece bugün
+  // Vardiya bitti mi? (geçmiş gün veya bugün bitmiş)
+  const isEnded = (dayIdx, endTime) => {
+    if (dayIdx < TODAY_IDX) return true;
+    if (dayIdx === TODAY_IDX) return toMins(endTime) <= nowMins();
+    return false;
+  };
+
+  // Günlük: bugün bitmiş vardiyalar
   const dailyMins = staffId =>
     (sched[TODAY_IDX]||[])
-      .filter(sh=>sh.staffIds.includes(staffId))
-      .reduce((acc,sh)=>acc+diff(sh.start,sh.end),0);
+      .filter(sh => sh.staffIds.includes(staffId) && toMins(sh.end) <= nowMins())
+      .reduce((acc,sh) => acc+diff(sh.start,sh.end), 0);
 
-  // Aylık: Supabase'den çek
+  // Haftalık: geçmiş günler + bugün bitmiş vardiyalar
+  const weeklyMins = staffId =>
+    Object.entries(sched).flatMap(([idx, shifts]) =>
+      shifts.filter(sh => sh.staffIds.includes(staffId) && isEnded(parseInt(idx), sh.end))
+    ).reduce((acc,sh) => acc+diff(sh.start,sh.end), 0);
+
+  // Aylık: Supabase'den çek, geçmiş vardiyaları filtrele
   useEffect(() => {
     if (period !== 'monthly') return;
     setFetching(true);
     const now = new Date();
+    const todayStr = now.toISOString().slice(0,10);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
     const monthEnd   = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().slice(0,10);
     supabase
       .from('shifts')
-      .select('start_time,end_time,shift_assignments(staff_id)')
+      .select('week_start,day_index,start_time,end_time,shift_assignments(staff_id)')
       .gte('week_start', monthStart)
       .lte('week_start', monthEnd)
       .then(({data}) => {
         const map = {};
         (data||[]).forEach(sh => {
+          // Vardiyının gerçek tarihi
+          const d = new Date(sh.week_start);
+          d.setDate(d.getDate() + sh.day_index);
+          const shiftDate = d.toISOString().slice(0,10);
+          const ended =
+            shiftDate < todayStr ||
+            (shiftDate === todayStr && toMins(sh.end_time) <= nowMins());
+          if (!ended) return;
           const mins = diff(sh.start_time, sh.end_time);
           (sh.shift_assignments||[]).forEach(a => {
             map[a.staff_id] = (map[a.staff_id]||0) + mins;
