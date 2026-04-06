@@ -306,23 +306,36 @@ export default function App() {
 
 /* ─── LOGIN ──────────────────────────────────────────────── */
 function Login() {
-  const [email,    setEmail]    = useState('');
+  const [profiles, setProfiles] = useState([]);
+  const [selected, setSelected] = useState(null); // {id, name, email, initials, color}
   const [password, setPassword] = useState('');
   const [loading,  setLoading]  = useState(false);
+  const [fetching, setFetching] = useState(true);
   const [error,    setError]    = useState('');
 
+  useEffect(() => {
+    supabase.from('profiles').select('id,name,email,initials,color,role').order('name')
+      .then(({ data }) => { setProfiles(data || []); setFetching(false); });
+  }, []);
+
   const signIn = async () => {
-    if (!email || !password) { setError('Email ve şifre gerekli'); return; }
+    if (!selected || !password) { setError('Kullanıcı ve şifre gerekli'); return; }
     setLoading(true); setError('');
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setError('Email veya şifre hatalı');
+    const { error } = await supabase.auth.signInWithPassword({ email: selected.email, password });
+    if (error) setError('Şifre hatalı');
     setLoading(false);
   };
+
+  if (fetching) return (
+    <View style={{flex:1,backgroundColor:T.bg,justifyContent:'center',alignItems:'center'}}>
+      <ActivityIndicator color={T.acc}/>
+    </View>
+  );
 
   return (
     <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':'height'}>
       <ScrollView style={{flex:1,backgroundColor:T.bg}} contentContainerStyle={{padding:28,paddingTop:60}}>
-        <View style={{marginBottom:48,alignItems:'center'}}>
+        <View style={{marginBottom:36,alignItems:'center'}}>
           <View style={{width:64,height:64,borderRadius:20,backgroundColor:T.accM,
             borderWidth:1.5,borderColor:T.b2,justifyContent:'center',alignItems:'center',marginBottom:16}}>
             <Text style={{fontSize:28}}>🍽</Text>
@@ -330,28 +343,56 @@ function Login() {
           <Text style={{color:T.tp,fontSize:26,fontWeight:'700',letterSpacing:0.5}}>MasalShift</Text>
           <Text style={{color:T.ts,fontSize:14,marginTop:4}}>Restoran Vardiya Yönetimi</Text>
         </View>
-        <View style={{gap:12}}>
-          <TextInput
-            style={{backgroundColor:T.inp,color:T.tp,borderWidth:1,borderColor:T.b,borderRadius:12,padding:14,fontSize:15}}
-            placeholder="Email" placeholderTextColor={T.ts}
-            value={email} onChangeText={setEmail}
-            autoCapitalize="none" keyboardType="email-address"
-          />
-          <TextInput
-            style={{backgroundColor:T.inp,color:T.tp,borderWidth:1,borderColor:T.b,borderRadius:12,padding:14,fontSize:15}}
-            placeholder="Şifre" placeholderTextColor={T.ts}
-            value={password} onChangeText={setPassword}
-            secureTextEntry
-          />
-          {!!error && <Text style={{color:T.er,fontSize:13,textAlign:'center'}}>{error}</Text>}
-          <TouchableOpacity
-            style={{backgroundColor:loading?T.accM:T.acc,borderRadius:12,padding:16,alignItems:'center',marginTop:4}}
-            onPress={signIn} disabled={loading}>
-            {loading
-              ? <ActivityIndicator color={T.acc} size="small"/>
-              : <Text style={{color:'#000',fontWeight:'700',fontSize:16}}>Giriş Yap</Text>}
-          </TouchableOpacity>
-        </View>
+
+        {!selected ? (
+          <View style={{gap:10}}>
+            <Text style={{color:T.ts,fontSize:13,fontWeight:'600',marginBottom:4,letterSpacing:0.5}}>KİM SİN?</Text>
+            {profiles.map(p => (
+              <TouchableOpacity key={p.id} onPress={() => { setSelected(p); setError(''); }}
+                style={{flexDirection:'row',alignItems:'center',gap:14,
+                  backgroundColor:T.s2,borderWidth:1,borderColor:T.b,borderRadius:14,padding:16}}>
+                <View style={{width:44,height:44,borderRadius:14,backgroundColor:(p.color||T.sky)+'25',
+                  alignItems:'center',justifyContent:'center'}}>
+                  <Text style={{color:p.color||T.sky,fontWeight:'800',fontSize:16}}>{p.initials||'?'}</Text>
+                </View>
+                <View>
+                  <Text style={{color:T.tp,fontWeight:'600',fontSize:15}}>{p.name}</Text>
+                  <Text style={{color:T.ts,fontSize:12,marginTop:2}}>{p.role==='admin'?'Yönetici':'Personel'}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <View style={{gap:12}}>
+            <TouchableOpacity onPress={() => { setSelected(null); setPassword(''); setError(''); }}
+              style={{flexDirection:'row',alignItems:'center',gap:12,
+                backgroundColor:T.s2,borderWidth:1,borderColor:T.b2,borderRadius:14,padding:16,marginBottom:4}}>
+              <View style={{width:44,height:44,borderRadius:14,backgroundColor:(selected.color||T.sky)+'25',
+                alignItems:'center',justifyContent:'center'}}>
+                <Text style={{color:selected.color||T.sky,fontWeight:'800',fontSize:16}}>{selected.initials||'?'}</Text>
+              </View>
+              <View style={{flex:1}}>
+                <Text style={{color:T.tp,fontWeight:'600',fontSize:15}}>{selected.name}</Text>
+                <Text style={{color:T.ts,fontSize:12,marginTop:1}}>değiştirmek için dokun</Text>
+              </View>
+              <Text style={{color:T.ts,fontSize:18}}>›</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={{backgroundColor:T.inp,color:T.tp,borderWidth:1,borderColor:T.b,borderRadius:12,padding:14,fontSize:15}}
+              placeholder="Şifre" placeholderTextColor={T.ts}
+              value={password} onChangeText={setPassword}
+              secureTextEntry autoFocus
+            />
+            {!!error && <Text style={{color:T.er,fontSize:13,textAlign:'center'}}>{error}</Text>}
+            <TouchableOpacity
+              style={{backgroundColor:loading?T.accM:T.acc,borderRadius:12,padding:16,alignItems:'center',marginTop:4}}
+              onPress={signIn} disabled={loading}>
+              {loading
+                ? <ActivityIndicator color={T.acc} size="small"/>
+                : <Text style={{color:'#000',fontWeight:'700',fontSize:16}}>Giriş Yap</Text>}
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
