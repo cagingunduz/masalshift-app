@@ -50,8 +50,8 @@ const getWeekStart = (offset=0) => {
   const d = new Date();
   const day = d.getDay();
   d.setDate(d.getDate() - (day===0?6:day-1) + offset*7);
-  d.setHours(0,0,0,0);
-  return d.toISOString().split('T')[0];
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 };
 
 const getDayNum = (weekStart, dayIdx) => {
