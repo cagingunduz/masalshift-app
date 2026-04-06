@@ -281,7 +281,7 @@ export default function App() {
           <TeamView staff={staff} createStaff={createStaff}/>
         )}
         {session && profile?.role==='admin' && tab==='hours' && (
-          <HoursView staff={staff} sched={sched} weekStart={weekStart}/>
+          <HoursView staff={staff}/>
         )}
         {session && profile?.role==='staff' && tab==='home' && (
           <StaffHome sched={sched} gs={gs} profile={profile} weekStart={weekStart}/>
@@ -857,82 +857,80 @@ function AddBlockForm({onAdd}) {
 }
 
 /* ─── HOURS VIEW ────────────────────────────────────────── */
-function HoursView({staff, sched, weekStart}) {
-  const [period, setPeriod] = useState('weekly');
-  const [monthData, setMonthData] = useState(null);
-  const [fetching, setFetching] = useState(false);
+function HoursView({staff}) {
+  const [period,  setPeriod]  = useState('weekly');
+  const [data,    setData]    = useState({});
+  const [fetching,setFetching]= useState(false);
 
+  const pad  = n => String(n).padStart(2,'0');
   const toMins = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
   const diff   = (s,e) => Math.max(0, toMins(e)-toMins(s));
-  const fmt    = mins => {
-    const h=Math.floor(mins/60), m=mins%60;
-    return m>0 ? `${h}s ${m}dk` : `${h}s`;
-  };
+  const fmt    = mins => { const h=Math.floor(mins/60),m=mins%60; return m>0?`${h}s ${m}dk`:`${h}s`; };
 
-  const nowMins = () => { const n=new Date(); return n.getHours()*60+n.getMinutes(); };
-
-  // Vardiya bitti mi? (geçmiş gün veya bugün bitmiş)
-  const isEnded = (dayIdx, endTime) => {
-    if (dayIdx < TODAY_IDX) return true;
-    if (dayIdx === TODAY_IDX) return toMins(endTime) <= nowMins();
-    return false;
-  };
-
-  // Günlük: bugün bitmiş vardiyalar
-  const dailyMins = staffId =>
-    (sched[TODAY_IDX]||[])
-      .filter(sh => sh.staffIds.includes(staffId) && toMins(sh.end) <= nowMins())
-      .reduce((acc,sh) => acc+diff(sh.start,sh.end), 0);
-
-  // Haftalık: geçmiş günler + bugün bitmiş vardiyalar
-  const weeklyMins = staffId =>
-    Object.entries(sched).flatMap(([idx, shifts]) =>
-      shifts.filter(sh => sh.staffIds.includes(staffId) && isEnded(parseInt(idx), sh.end))
-    ).reduce((acc,sh) => acc+diff(sh.start,sh.end), 0);
-
-  // Aylık: Supabase'den çek, geçmiş vardiyaları filtrele
-  useEffect(() => {
-    if (period !== 'monthly') return;
-    setFetching(true);
+  // Takvim sınırları — yerel saat, UTC yok
+  const getBounds = () => {
     const now = new Date();
-    const pad = n => String(n).padStart(2,'0');
     const localToday = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+    const nowM = now.getHours()*60+now.getMinutes();
+
+    // Pazartesi (bu hafta)
+    const dow = now.getDay();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - (dow===0?6:dow-1));
+    const weekStart = `${monday.getFullYear()}-${pad(monday.getMonth()+1)}-${pad(monday.getDate())}`;
+
+    // Bu ay
     const monthStart = `${now.getFullYear()}-${pad(now.getMonth()+1)}-01`;
     const lastDay = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
     const monthEnd = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(lastDay)}`;
+
+    return { localToday, nowM, weekStart, monthStart, monthEnd };
+  };
+
+  // Vardiya bitti mi?
+  const ended = (weekStartStr, dayIndex, endTime, localToday, nowM) => {
+    const d = new Date(weekStartStr + 'T12:00:00');
+    d.setDate(d.getDate() + dayIndex);
+    const sd = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    if (sd < localToday) return true;
+    if (sd === localToday) return toMins(endTime) <= nowM;
+    return false;
+  };
+
+  useEffect(() => {
+    setFetching(true);
+    const { localToday, nowM, weekStart, monthStart, monthEnd } = getBounds();
+
+    const rangeStart = period==='monthly' ? monthStart : weekStart;
+    const rangeEnd   = period==='monthly' ? monthEnd   : weekStart;
+
     supabase
       .from('shifts')
       .select('week_start,day_index,start_time,end_time,shift_assignments(staff_id)')
-      .gte('week_start', monthStart)
-      .lte('week_start', monthEnd)
-      .then(({data}) => {
+      .gte('week_start', rangeStart)
+      .lte('week_start', rangeEnd)
+      .then(({data: rows}) => {
         const map = {};
-        (data||[]).forEach(sh => {
-          // Yerel saatle gerçek tarih hesapla (T12:00 ile UTC kaymasını önle)
-          const d = new Date(sh.week_start + 'T12:00:00');
-          d.setDate(d.getDate() + sh.day_index);
-          const shiftDate = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-          const ended =
-            shiftDate < localToday ||
-            (shiftDate === localToday && toMins(sh.end_time) <= nowMins());
-          if (!ended) return;
+        (rows||[]).forEach(sh => {
+          // Günlük: sadece bugünün vardiyaları
+          if (period==='daily') {
+            const d = new Date(sh.week_start + 'T12:00:00');
+            d.setDate(d.getDate() + sh.day_index);
+            const sd = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+            if (sd !== localToday) return;
+          }
+          if (!ended(sh.week_start, sh.day_index, sh.end_time, localToday, nowM)) return;
           const mins = diff(sh.start_time, sh.end_time);
           (sh.shift_assignments||[]).forEach(a => {
             map[a.staff_id] = (map[a.staff_id]||0) + mins;
           });
         });
-        setMonthData(map);
+        setData(map);
         setFetching(false);
       });
   }, [period]);
 
-  const getMins = staffId => {
-    if (period==='daily')   return dailyMins(staffId);
-    if (period==='weekly')  return weeklyMins(staffId);
-    if (period==='monthly') return monthData?.[staffId] || 0;
-    return 0;
-  };
-
+  const getMins = id => data[id] || 0;
   const sorted = [...staff].sort((a,b) => getMins(b.id)-getMins(a.id));
 
   return (
