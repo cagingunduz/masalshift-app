@@ -413,7 +413,7 @@ function AdminHome({sched,selDay,setSelDay,gs,avail,staff,addShift,delShift,updS
         })}
       </ScrollView>
 
-      <View style={{flexDirection:'row',gap:8,paddingHorizontal:20,marginTop:24}}>
+      <View style={{flexDirection:'row',gap:8,paddingHorizontal:20,marginTop:40}}>
         {[{l:'Vardiya',v:dayShifts.length},{l:'Çalışan',v:headcount}].map(({l,v})=>(
           <View key={l} style={{flex:1,backgroundColor:T.s2,borderRadius:14,padding:12,borderWidth:1,borderColor:T.b}}>
             <Text style={{color:T.ts,fontSize:10,letterSpacing:0.5,textTransform:'uppercase'}}>{l}</Text>
