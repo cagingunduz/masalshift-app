@@ -280,6 +280,9 @@ export default function App() {
         {session && profile?.role==='admin' && tab==='team' && (
           <TeamView staff={staff} createStaff={createStaff}/>
         )}
+        {session && profile?.role==='admin' && tab==='hours' && (
+          <HoursView staff={staff} sched={sched} weekStart={weekStart}/>
+        )}
         {session && profile?.role==='staff' && tab==='home' && (
           <StaffHome sched={sched} gs={gs} profile={profile} weekStart={weekStart}/>
         )}
@@ -853,6 +856,116 @@ function AddBlockForm({onAdd}) {
   );
 }
 
+/* ─── HOURS VIEW ────────────────────────────────────────── */
+function HoursView({staff, sched, weekStart}) {
+  const [period, setPeriod] = useState('weekly');
+  const [monthData, setMonthData] = useState(null);
+  const [fetching, setFetching] = useState(false);
+
+  const toMins = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
+  const diff   = (s,e) => Math.max(0, toMins(e)-toMins(s));
+  const fmt    = mins => {
+    const h=Math.floor(mins/60), m=mins%60;
+    return m>0 ? `${h}s ${m}dk` : `${h}s`;
+  };
+
+  // Haftalık: mevcut sched verisinden
+  const weeklyMins = staffId =>
+    Object.values(sched).flat()
+      .filter(sh=>sh.staffIds.includes(staffId))
+      .reduce((acc,sh)=>acc+diff(sh.start,sh.end),0);
+
+  // Günlük: sadece bugün
+  const dailyMins = staffId =>
+    (sched[TODAY_IDX]||[])
+      .filter(sh=>sh.staffIds.includes(staffId))
+      .reduce((acc,sh)=>acc+diff(sh.start,sh.end),0);
+
+  // Aylık: Supabase'den çek
+  useEffect(() => {
+    if (period !== 'monthly') return;
+    setFetching(true);
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
+    const monthEnd   = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().slice(0,10);
+    supabase
+      .from('shifts')
+      .select('start_time,end_time,shift_assignments(staff_id)')
+      .gte('week_start', monthStart)
+      .lte('week_start', monthEnd)
+      .then(({data}) => {
+        const map = {};
+        (data||[]).forEach(sh => {
+          const mins = diff(sh.start_time, sh.end_time);
+          (sh.shift_assignments||[]).forEach(a => {
+            map[a.staff_id] = (map[a.staff_id]||0) + mins;
+          });
+        });
+        setMonthData(map);
+        setFetching(false);
+      });
+  }, [period]);
+
+  const getMins = staffId => {
+    if (period==='daily')   return dailyMins(staffId);
+    if (period==='weekly')  return weeklyMins(staffId);
+    if (period==='monthly') return monthData?.[staffId] || 0;
+    return 0;
+  };
+
+  const sorted = [...staff].sort((a,b) => getMins(b.id)-getMins(a.id));
+
+  return (
+    <View style={{flex:1}}>
+      <View style={{padding:20,paddingBottom:0}}>
+        <Text style={{color:T.tp,fontSize:22,fontWeight:'700',marginBottom:14}}>Çalışma Saatleri</Text>
+        <View style={{flexDirection:'row',backgroundColor:T.s2,borderRadius:14,padding:4,borderWidth:1,borderColor:T.b}}>
+          {[{k:'daily',l:'Günlük'},{k:'weekly',l:'Haftalık'},{k:'monthly',l:'Aylık'}].map(p=>(
+            <TouchableOpacity key={p.k} onPress={()=>setPeriod(p.k)} style={{flex:1,
+              backgroundColor:period===p.k?T.acc:'transparent',
+              borderRadius:11,paddingVertical:8,alignItems:'center'}}>
+              <Text style={{color:period===p.k?'#000':T.ts,fontSize:13,fontWeight:'600'}}>{p.l}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {fetching
+        ? <View style={{flex:1,justifyContent:'center',alignItems:'center'}}><ActivityIndicator color={T.acc}/></View>
+        : <ScrollView style={{flex:1}} contentContainerStyle={{padding:20,gap:10}}>
+            {sorted.map(s => {
+              const mins = getMins(s.id);
+              const maxMins = getMins(sorted[0]?.id) || 1;
+              const pct = mins/maxMins;
+              return (
+                <View key={s.id} style={{backgroundColor:T.s2,borderRadius:16,padding:16,
+                  borderWidth:1,borderColor:T.b}}>
+                  <View style={{flexDirection:'row',alignItems:'center',gap:12,marginBottom:10}}>
+                    <View style={{width:40,height:40,borderRadius:12,
+                      backgroundColor:(s.color||T.sky)+'25',alignItems:'center',justifyContent:'center'}}>
+                      <Text style={{color:s.color||T.sky,fontWeight:'800',fontSize:14}}>{s.initials||'?'}</Text>
+                    </View>
+                    <View style={{flex:1}}>
+                      <Text style={{color:T.tp,fontWeight:'600',fontSize:15}}>{s.name}</Text>
+                      <Text style={{color:T.ts,fontSize:12}}>{s.role==='admin'?'Yönetici':'Personel'}</Text>
+                    </View>
+                    <Text style={{color:mins>0?T.acc:T.tt,fontWeight:'700',fontSize:18}}>
+                      {mins>0 ? fmt(mins) : '—'}
+                    </Text>
+                  </View>
+                  <View style={{height:4,backgroundColor:T.s3,borderRadius:2}}>
+                    <View style={{height:4,borderRadius:2,
+                      backgroundColor:(s.color||T.acc),width:`${Math.round(pct*100)}%`}}/>
+                  </View>
+                </View>
+              );
+            })}
+          </ScrollView>
+      }
+    </View>
+  );
+}
+
 /* ─── TEAM VIEW ──────────────────────────────────────────── */
 function TeamView({staff, createStaff}) {
   const [showForm, setShowForm] = useState(false);
@@ -935,7 +1048,7 @@ function TeamView({staff, createStaff}) {
 /* ─── BOTTOM NAV ─────────────────────────────────────────── */
 function Nav({role,tab,setTab,onLogout}) {
   const tabs = role==='admin'
-    ? [{k:'home',l:'Vardiyalar'},{k:'team',l:'Ekip'}]
+    ? [{k:'home',l:'Vardiyalar'},{k:'hours',l:'Saatler'},{k:'team',l:'Ekip'}]
     : [{k:'home',l:'Vardiyam'},{k:'avail',l:'Müsaitlik'}];
   return (
     <View style={{backgroundColor:T.s1,borderTopWidth:1,borderTopColor:T.b,
