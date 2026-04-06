@@ -236,11 +236,12 @@ export default function App() {
     await loadAvail();
   };
 
-  const createStaff = async (name, email, password) => {
+  const createStaff = async (name, password) => {
+    const fakeEmail = `user_${Date.now()}_${Math.random().toString(36).slice(2,8)}@masalshift.internal`;
     const tmp = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: { persistSession:false, autoRefreshToken:false },
     });
-    const { data, error } = await tmp.auth.signUp({ email, password });
+    const { data, error } = await tmp.auth.signUp({ email: fakeEmail, password });
     if (error || !data.user) return { error: error?.message || 'Kullanıcı oluşturulamadı' };
 
     const initials = name.trim().split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
@@ -248,7 +249,7 @@ export default function App() {
     const color = COLORS[staff.length % COLORS.length];
 
     const { error: pErr } = await supabase.from('profiles').insert({
-      id:data.user.id, name:name.trim(), role:'staff', initials, color,
+      id:data.user.id, name:name.trim(), role:'staff', initials, color, email:fakeEmail,
     });
     if (pErr) return { error: pErr.message };
     await loadStaff();
@@ -898,17 +899,16 @@ function AddBlockForm({onAdd}) {
 function TeamView({staff, createStaff}) {
   const [showForm, setShowForm] = useState(false);
   const [name,     setName]     = useState('');
-  const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState('');
 
   const submit = async () => {
-    if (!name||!email||!password) { setError('Tüm alanlar zorunlu'); return; }
+    if (!name||!password) { setError('İsim ve şifre zorunlu'); return; }
     setLoading(true); setError('');
-    const result = await createStaff(name, email, password);
+    const result = await createStaff(name, password);
     if (result.error) setError(result.error);
-    else { setName(''); setEmail(''); setPassword(''); setShowForm(false); }
+    else { setName(''); setPassword(''); setShowForm(false); }
     setLoading(false);
   };
 
@@ -934,7 +934,6 @@ function TeamView({staff, createStaff}) {
           </View>
           {[
             {ph:'Ad Soyad', val:name,     fn:setName,     cap:'words',  kb:'default'},
-            {ph:'Email',    val:email,    fn:setEmail,    cap:'none',   kb:'email-address'},
             {ph:'Şifre',    val:password, fn:setPassword, cap:'none',   kb:'default', sec:true},
           ].map((f,i)=>(
             <TextInput key={i}
