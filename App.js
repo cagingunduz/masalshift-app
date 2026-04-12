@@ -692,7 +692,7 @@ function NotifView({profile, gs, loadShifts}) {
   const load = async () => {
     const { data } = await supabase
       .from('swap_requests')
-      .select('*')
+      .select('*, requester_shift:requester_shift_id(start_time,end_time,day_index,week_start), target_shift:target_shift_id(start_time,end_time,day_index,week_start)')
       .eq('target_id', profile.id)
       .eq('status', 'pending')
       .order('created_at', {ascending: false});
@@ -771,18 +771,27 @@ function NotifView({profile, gs, loadShifts}) {
                 </View>
               </View>
 
-              <View style={{backgroundColor:T.s3,borderRadius:14,padding:14,marginBottom:14,gap:8}}>
-                <View style={{flexDirection:'row',alignItems:'center',gap:8}}>
-                  <View style={{width:8,height:8,borderRadius:4,backgroundColor:(requester.c||T.sky)}}/>
-                  <Text style={{color:T.ts,fontSize:12}}>
-                    <Text style={{color:requester.c||T.sky,fontWeight:'600'}}>{requester.name}</Text>
-                    {' kendi vardiyasını veriyor'}
+              <View style={{backgroundColor:T.s3,borderRadius:14,padding:14,marginBottom:14,gap:10}}>
+                <View style={{flexDirection:'row',alignItems:'center',gap:10}}>
+                  <View style={{width:8,height:8,borderRadius:4,backgroundColor:requester.c||T.sky,flexShrink:0}}/>
+                  <Text style={{color:T.ts,fontSize:13,flex:1}}>
+                    <Text style={{color:requester.c||T.sky,fontWeight:'700'}}>{requester.name}</Text>
+                    {'nın '}
+                    <Text style={{color:T.tp,fontWeight:'600'}}>
+                      {req.requester_shift ? `${DAYS_S[req.requester_shift.day_index]} ${req.requester_shift.start_time}–${req.requester_shift.end_time}` : '—'}
+                    </Text>
+                    {' vardiyası'}
                   </Text>
                 </View>
-                <View style={{flexDirection:'row',alignItems:'center',gap:8}}>
-                  <View style={{width:8,height:8,borderRadius:4,backgroundColor:T.acc}}/>
-                  <Text style={{color:T.ts,fontSize:12}}>
-                    {'senin vardiyani alıyor'}
+                <Text style={{color:T.tt,fontSize:11,textAlign:'center'}}>↕ değiştirmek istiyor</Text>
+                <View style={{flexDirection:'row',alignItems:'center',gap:10}}>
+                  <View style={{width:8,height:8,borderRadius:4,backgroundColor:T.acc,flexShrink:0}}/>
+                  <Text style={{color:T.ts,fontSize:13,flex:1}}>
+                    {'Senin '}
+                    <Text style={{color:T.acc,fontWeight:'600'}}>
+                      {req.target_shift ? `${DAYS_S[req.target_shift.day_index]} ${req.target_shift.start_time}–${req.target_shift.end_time}` : '—'}
+                    </Text>
+                    {' vardiyası'}
                   </Text>
                 </View>
               </View>
