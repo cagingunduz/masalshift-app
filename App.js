@@ -293,9 +293,7 @@ export default function App() {
           <ShiftsTableView sched={sched} gs={gs} profile={profile} weekStart={weekStart} weekOffset={weekOffset} changeWeek={changeWeek}/>
         )}
         {session && profile?.role==='staff' && tab==='notif' && (
-          <View style={{flex:1,justifyContent:'center',alignItems:'center'}}>
-            <Text style={{color:T.ts,fontSize:14}}>Yakında...</Text>
-          </View>
+          <NotifView profile={profile} gs={gs} loadShifts={loadShifts}/>
         )}
         {session && !profile && (
           <View style={{flex:1,justifyContent:'center',alignItems:'center',padding:32}}>
@@ -685,15 +683,164 @@ function StaffHome({sched,gs,profile,weekStart}) {
   );
 }
 
+/* ─── NOTIF VIEW ────────────────────────────────────────── */
+function NotifView({profile, gs, loadShifts}) {
+  const [requests, setRequests] = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [acting,   setActing]   = useState(null); // id being processed
+
+  const load = async () => {
+    const { data } = await supabase
+      .from('swap_requests')
+      .select('*')
+      .eq('target_id', profile.id)
+      .eq('status', 'pending')
+      .order('created_at', {ascending: false});
+    setRequests(data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const respond = async (req, accept) => {
+    setActing(req.id);
+    if (accept) {
+      // Vardiyaları değiştir
+      await supabase.from('shift_assignments')
+        .delete().eq('shift_id', req.requester_shift_id).eq('staff_id', req.requester_id);
+      await supabase.from('shift_assignments')
+        .insert({shift_id: req.requester_shift_id, staff_id: req.target_id});
+      await supabase.from('shift_assignments')
+        .delete().eq('shift_id', req.target_shift_id).eq('staff_id', req.target_id);
+      await supabase.from('shift_assignments')
+        .insert({shift_id: req.target_shift_id, staff_id: req.requester_id});
+      await loadShifts();
+    }
+    await supabase.from('swap_requests').update({status: accept?'accepted':'rejected'}).eq('id', req.id);
+    setActing(null);
+    load();
+  };
+
+  const fmtShift = (req, isTarget) => {
+    // Gün ve saat bilgisini swap_request'ten çekemiyoruz direkt,
+    // sadece shift_id var. Requester/target bilgisini gs'den alıyoruz.
+    return isTarget
+      ? `${gs(req.target_id).name}'ın vardiyası`
+      : `${gs(req.requester_id).name}'ın vardiyası`;
+  };
+
+  if (loading) return (
+    <View style={{flex:1,justifyContent:'center',alignItems:'center'}}>
+      <ActivityIndicator color={T.acc}/>
+    </View>
+  );
+
+  return (
+    <View style={{flex:1}}>
+      <View style={{padding:20,paddingBottom:12}}>
+        <Text style={{color:T.tp,fontSize:22,fontWeight:'700'}}>Bildirimler</Text>
+        {requests.length>0 &&
+          <Text style={{color:T.ts,fontSize:13,marginTop:3}}>{requests.length} bekleyen talep</Text>}
+      </View>
+      <ScrollView style={{flex:1}} contentContainerStyle={{paddingHorizontal:20,paddingBottom:20,gap:12}}>
+        {requests.length===0 && (
+          <View style={{alignItems:'center',paddingTop:60}}>
+            <Text style={{color:T.tt,fontSize:15}}>Bekleyen bildirim yok</Text>
+          </View>
+        )}
+        {requests.map(req => {
+          const requester = gs(req.requester_id);
+          const isActing = acting === req.id;
+          return (
+            <View key={req.id} style={{backgroundColor:T.s2,borderRadius:20,
+              borderWidth:1,borderColor:T.b,padding:18}}>
+              <View style={{flexDirection:'row',alignItems:'center',gap:12,marginBottom:14}}>
+                <View style={{width:46,height:46,borderRadius:14,
+                  backgroundColor:(requester.c||T.sky)+'25',alignItems:'center',justifyContent:'center'}}>
+                  <Text style={{color:requester.c||T.sky,fontWeight:'800',fontSize:16}}>
+                    {requester.i||'?'}
+                  </Text>
+                </View>
+                <View style={{flex:1}}>
+                  <Text style={{color:T.tp,fontWeight:'700',fontSize:15}}>
+                    {requester.name} vardiya teklif etti
+                  </Text>
+                  <Text style={{color:T.ts,fontSize:12,marginTop:2}}>
+                    {new Date(req.created_at).toLocaleDateString('tr-TR')}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={{backgroundColor:T.s3,borderRadius:14,padding:14,marginBottom:14,gap:8}}>
+                <View style={{flexDirection:'row',alignItems:'center',gap:8}}>
+                  <View style={{width:8,height:8,borderRadius:4,backgroundColor:(requester.c||T.sky)}}/>
+                  <Text style={{color:T.ts,fontSize:12}}>
+                    <Text style={{color:requester.c||T.sky,fontWeight:'600'}}>{requester.name}</Text>
+                    {' kendi vardiyasını veriyor'}
+                  </Text>
+                </View>
+                <View style={{flexDirection:'row',alignItems:'center',gap:8}}>
+                  <View style={{width:8,height:8,borderRadius:4,backgroundColor:T.acc}}/>
+                  <Text style={{color:T.ts,fontSize:12}}>
+                    {'senin vardiyani alıyor'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={{flexDirection:'row',gap:10}}>
+                <TouchableOpacity onPress={()=>respond(req,false)} disabled={isActing}
+                  style={{flex:1,backgroundColor:T.erM,borderWidth:1,borderColor:T.er+'40',
+                    borderRadius:14,padding:13,alignItems:'center'}}>
+                  <Text style={{color:T.er,fontWeight:'700',fontSize:14}}>Reddet</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={()=>respond(req,true)} disabled={isActing}
+                  style={{flex:1,backgroundColor:T.okM,borderWidth:1,borderColor:T.ok+'40',
+                    borderRadius:14,padding:13,alignItems:'center'}}>
+                  {isActing
+                    ? <ActivityIndicator color={T.ok} size="small"/>
+                    : <Text style={{color:T.ok,fontWeight:'700',fontSize:14}}>Onayla</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
 /* ─── SHIFTS TABLE VIEW ─────────────────────────────────── */
 function ShiftsTableView({sched, gs, profile, weekStart, weekOffset, changeWeek}) {
-  const shMins = sh => { const [h1,m1]=sh.start.split(':').map(Number),[h2,m2]=sh.end.split(':').map(Number); return Math.max(0,(h2*60+m2)-(h1*60+m1)); };
+  const [modal, setModal]   = useState(null); // {targetShift, targetDayIdx, targetId}
+  const [myPick, setMyPick] = useState(null); // {shift, dayIdx}
+  const [sending, setSending] = useState(false);
+  const [sent, setSent]     = useState(false);
+
+  const myShifts = Object.entries(sched).flatMap(([di, shifts]) =>
+    shifts.filter(sh => sh.staffIds.includes(profile.id)).map(sh => ({shift:sh, dayIdx:parseInt(di)}))
+  );
+
+  const openSwap = (sh, dayIdx, targetId) => {
+    setModal({targetShift:sh, targetDayIdx:dayIdx, targetId});
+    setMyPick(null); setSent(false);
+  };
+
+  const sendRequest = async () => {
+    if (!modal || !myPick) return;
+    setSending(true);
+    await supabase.from('swap_requests').insert({
+      requester_id: profile.id,
+      target_id: modal.targetId,
+      requester_shift_id: myPick.shift.id,
+      target_shift_id: modal.targetShift.id,
+      week_start: weekStart,
+    });
+    setSending(false); setSent(true);
+    setTimeout(() => { setModal(null); setSent(false); }, 1500);
+  };
 
   const days = DAYS_F.map((dayName, i) => ({
-    dayName,
-    dayNum: getDayNum(weekStart, i),
-    idx: i,
-    shifts: (sched[i] || []),
+    dayName, dayNum: getDayNum(weekStart, i), idx: i, shifts: (sched[i] || []),
   }));
 
   return (
@@ -711,6 +858,7 @@ function ShiftsTableView({sched, gs, profile, weekStart, weekOffset, changeWeek}
           </TouchableOpacity>
         </View>
         <Text style={{color:T.tp,fontSize:22,fontWeight:'700'}}>Haftalık Program</Text>
+        <Text style={{color:T.ts,fontSize:12,marginTop:3}}>Birisiyle vardiya değiştirmek için adına bas</Text>
       </View>
 
       <ScrollView style={{flex:1}} contentContainerStyle={{paddingHorizontal:20,paddingBottom:20,gap:8}}>
@@ -725,38 +873,39 @@ function ShiftsTableView({sched, gs, profile, weekStart, weekOffset, changeWeek}
                 {isToday && <View style={{width:6,height:6,borderRadius:3,backgroundColor:T.acc}}/>}
                 <Text style={{color:isToday?T.acc:T.tp,fontWeight:'700',fontSize:14}}>{dayName}</Text>
                 <Text style={{color:T.tt,fontSize:13}}>{dayNum}</Text>
-                {shifts.length===0 && <Text style={{color:T.tt,fontSize:12,marginLeft:'auto'}}>Vardiya yok</Text>}
+                {shifts.length===0 && <Text style={{color:T.tt,fontSize:12,marginLeft:'auto'}}>—</Text>}
               </View>
               {shifts.map((sh,j) => {
                 const isMine = sh.staffIds.includes(profile.id);
                 return (
-                  <View key={j} style={{
-                    flexDirection:'row',alignItems:'center',
-                    paddingHorizontal:16,paddingVertical:12,
+                  <View key={j} style={{paddingHorizontal:16,paddingVertical:12,
                     backgroundColor:isMine?T.acc+'0D':'transparent',
                     borderBottomWidth:j<shifts.length-1?1:0,borderBottomColor:T.b+'50'}}>
-                    <View style={{width:3,height:36,borderRadius:2,
-                      backgroundColor:isMine?T.acc:T.ts+'40',marginRight:12}}/>
-                    <View style={{flex:1}}>
+                    <View style={{flexDirection:'row',alignItems:'center',marginBottom:6}}>
+                      <View style={{width:3,height:20,borderRadius:2,
+                        backgroundColor:isMine?T.acc:T.ts+'40',marginRight:10}}/>
                       <Text style={{color:isMine?T.acc:T.tp,fontWeight:'700',fontSize:15}}>
                         {sh.start} – {sh.end}
                       </Text>
-                      <View style={{flexDirection:'row',flexWrap:'wrap',gap:4,marginTop:6}}>
-                        {sh.staffIds.map(id => {
-                          const s = gs(id);
-                          const isMe = id === profile.id;
-                          return (
-                            <View key={id} style={{flexDirection:'row',alignItems:'center',gap:5,
+                    </View>
+                    <View style={{flexDirection:'row',flexWrap:'wrap',gap:6,paddingLeft:13}}>
+                      {sh.staffIds.map(id => {
+                        const s = gs(id);
+                        const isMe = id === profile.id;
+                        return (
+                          <TouchableOpacity key={id} disabled={isMe}
+                            onPress={() => openSwap(sh, idx, id)}
+                            style={{flexDirection:'row',alignItems:'center',gap:5,
                               backgroundColor:(s.c||T.sky)+(isMe?'30':'15'),
-                              borderRadius:8,paddingVertical:3,paddingHorizontal:8,
+                              borderRadius:8,paddingVertical:4,paddingHorizontal:10,
                               borderWidth:isMe?1:0,borderColor:(s.c||T.sky)+'60'}}>
-                              <Text style={{color:s.c||T.sky,fontSize:12,fontWeight:isMe?'700':'500'}}>
-                                {s.name||s.i||'?'}
-                              </Text>
-                            </View>
-                          );
-                        })}
-                      </View>
+                            <Text style={{color:s.c||T.sky,fontSize:12,fontWeight:isMe?'700':'500'}}>
+                              {s.name||s.i||'?'}
+                            </Text>
+                            {!isMe && <Text style={{color:(s.c||T.sky)+'80',fontSize:10}}>↔</Text>}
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
                   </View>
                 );
@@ -765,6 +914,69 @@ function ShiftsTableView({sched, gs, profile, weekStart, weekOffset, changeWeek}
           );
         })}
       </ScrollView>
+
+      {/* SWAP MODAL */}
+      {modal && (
+        <View style={{position:'absolute',top:0,left:0,right:0,bottom:0,
+          backgroundColor:'rgba(0,0,0,0.7)',justifyContent:'flex-end'}}>
+          <View style={{backgroundColor:T.s1,borderTopLeftRadius:24,borderTopRightRadius:24,
+            padding:24,paddingBottom:40}}>
+            <View style={{width:36,height:4,backgroundColor:T.b2,borderRadius:2,alignSelf:'center',marginBottom:20}}/>
+            {sent ? (
+              <View style={{alignItems:'center',padding:20}}>
+                <Text style={{color:T.ok,fontSize:18,fontWeight:'700'}}>Talep Gönderildi</Text>
+                <Text style={{color:T.ts,fontSize:13,marginTop:6}}>
+                  {gs(modal.targetId).name} bildirim alacak
+                </Text>
+              </View>
+            ) : (
+              <>
+                <Text style={{color:T.tp,fontWeight:'700',fontSize:17,marginBottom:4}}>
+                  {gs(modal.targetId).name} ile vardiya değiştir
+                </Text>
+                <Text style={{color:T.ts,fontSize:13,marginBottom:16}}>
+                  Onun: {DAYS_S[modal.targetDayIdx]} {modal.targetShift.start}–{modal.targetShift.end}
+                </Text>
+                <Text style={{color:T.ts,fontSize:12,fontWeight:'600',letterSpacing:0.5,marginBottom:10}}>
+                  HANGİ VARDİYANI ÖNERİYORSUN?
+                </Text>
+                {myShifts.length === 0
+                  ? <Text style={{color:T.tt,fontSize:14,marginBottom:16}}>Bu hafta vardiyanda yok</Text>
+                  : myShifts.map(({shift:sh,dayIdx},i) => {
+                    const sel = myPick?.shift.id === sh.id;
+                    return (
+                      <TouchableOpacity key={i} onPress={()=>setMyPick({shift:sh,dayIdx})}
+                        style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',
+                          backgroundColor:sel?T.accM:T.s2,borderWidth:1,
+                          borderColor:sel?T.acc:T.b,borderRadius:14,padding:14,marginBottom:8}}>
+                        <Text style={{color:sel?T.acc:T.tp,fontWeight:'600'}}>
+                          {DAYS_F[dayIdx]} {sh.start}–{sh.end}
+                        </Text>
+                        {sel && <Text style={{color:T.acc,fontSize:16}}>✓</Text>}
+                      </TouchableOpacity>
+                    );
+                  })
+                }
+                <View style={{flexDirection:'row',gap:10,marginTop:8}}>
+                  <TouchableOpacity onPress={()=>setModal(null)}
+                    style={{flex:1,backgroundColor:T.s2,borderWidth:1,borderColor:T.b,
+                      borderRadius:14,padding:14,alignItems:'center'}}>
+                    <Text style={{color:T.ts,fontWeight:'600'}}>İptal</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={sendRequest}
+                    disabled={!myPick||sending}
+                    style={{flex:2,backgroundColor:myPick?T.acc:T.s3,
+                      borderRadius:14,padding:14,alignItems:'center'}}>
+                    {sending
+                      ? <ActivityIndicator color={T.acc} size="small"/>
+                      : <Text style={{color:myPick?'#000':T.tt,fontWeight:'700'}}>Talep Gönder</Text>}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      )}
     </View>
   );
 }
