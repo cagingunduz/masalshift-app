@@ -289,6 +289,14 @@ export default function App() {
         {session && profile?.role==='staff' && tab==='avail' && (
           <AvailView avail={avail} setDayAvail={setDayAvail} weekStart={weekStart}/>
         )}
+        {session && profile?.role==='staff' && tab==='shifts' && (
+          <ShiftsTableView sched={sched} gs={gs} profile={profile} weekStart={weekStart} weekOffset={weekOffset} changeWeek={changeWeek}/>
+        )}
+        {session && profile?.role==='staff' && tab==='notif' && (
+          <View style={{flex:1,justifyContent:'center',alignItems:'center'}}>
+            <Text style={{color:T.ts,fontSize:14}}>Yakında...</Text>
+          </View>
+        )}
         {session && !profile && (
           <View style={{flex:1,justifyContent:'center',alignItems:'center',padding:32}}>
             <Text style={{color:T.er,textAlign:'center',fontSize:15,marginBottom:20}}>
@@ -674,6 +682,83 @@ function StaffHome({sched,gs,profile,weekStart}) {
         })}
       </View>
     </ScrollView>
+  );
+}
+
+/* ─── SHIFTS TABLE VIEW ─────────────────────────────────── */
+function ShiftsTableView({sched, gs, profile, weekStart, weekOffset, changeWeek}) {
+  const fmt = mins => { const h=Math.floor(mins/60),m=mins%60; return m>0?`${h}s ${m}dk`:`${h}s`; };
+  const shMins = sh => { const [h1,m1]=sh.start.split(':').map(Number),[h2,m2]=sh.end.split(':').map(Number); return Math.max(0,(h2*60+m2)-(h1*60+m1)); };
+
+  const myShifts = DAYS_F.map((dayName, i) => ({
+    dayName,
+    dayNum: getDayNum(weekStart, i),
+    idx: i,
+    shifts: (sched[i] || []).filter(sh => sh.staffIds.includes(profile.id)),
+  }));
+
+  const total = myShifts.reduce((acc, d) =>
+    acc + d.shifts.reduce((a, sh) => a + shMins(sh), 0), 0);
+
+  return (
+    <View style={{flex:1}}>
+      <View style={{padding:20,paddingBottom:12}}>
+        <View style={{flexDirection:'row',alignItems:'center',gap:8,marginBottom:8}}>
+          <TouchableOpacity onPress={()=>changeWeek(-1)}
+            style={{backgroundColor:T.s2,borderWidth:1,borderColor:T.b,borderRadius:8,paddingVertical:4,paddingHorizontal:10}}>
+            <Text style={{color:T.ts,fontSize:16}}>‹</Text>
+          </TouchableOpacity>
+          <Chip label={weekOffset===0?'Bu hafta':formatWeekLabel(weekStart)} color={T.acc}/>
+          <TouchableOpacity onPress={()=>changeWeek(1)}
+            style={{backgroundColor:T.s2,borderWidth:1,borderColor:T.b,borderRadius:8,paddingVertical:4,paddingHorizontal:10}}>
+            <Text style={{color:T.ts,fontSize:16}}>›</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={{color:T.tp,fontSize:22,fontWeight:'700'}}>Vardiya Tablosu</Text>
+        {total > 0 && <Text style={{color:T.ts,fontSize:13,marginTop:2}}>Bu hafta toplam {fmt(total)}</Text>}
+      </View>
+
+      <ScrollView style={{flex:1}} contentContainerStyle={{paddingHorizontal:20,paddingBottom:20,gap:8}}>
+        {myShifts.map(({dayName,dayNum,idx,shifts}) => {
+          const isToday = weekOffset===0 && idx===TODAY_IDX;
+          return (
+            <View key={idx} style={{backgroundColor:isToday?T.accM:T.s2,borderRadius:16,
+              borderWidth:1,borderColor:isToday?T.acc+'40':T.b,overflow:'hidden'}}>
+              <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',
+                paddingHorizontal:16,paddingVertical:12,borderBottomWidth:shifts.length>0?1:0,
+                borderBottomColor:T.b}}>
+                <View style={{flexDirection:'row',alignItems:'center',gap:8}}>
+                  {isToday && <View style={{width:6,height:6,borderRadius:3,backgroundColor:T.acc}}/>}
+                  <Text style={{color:isToday?T.acc:T.tp,fontWeight:'700',fontSize:14}}>{dayName}</Text>
+                  <Text style={{color:T.tt,fontSize:13}}>{dayNum}</Text>
+                </View>
+                {shifts.length===0
+                  ? <Text style={{color:T.tt,fontSize:12}}>—</Text>
+                  : <Text style={{color:T.ts,fontSize:12}}>{fmt(shifts.reduce((a,sh)=>a+shMins(sh),0))}</Text>
+                }
+              </View>
+              {shifts.map((sh,j) => (
+                <View key={j} style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',
+                  paddingHorizontal:16,paddingVertical:10,
+                  borderBottomWidth:j<shifts.length-1?1:0,borderBottomColor:T.b+'60'}}>
+                  <Text style={{color:T.acc,fontWeight:'700',fontSize:15}}>{sh.start} – {sh.end}</Text>
+                  <View style={{flexDirection:'row',gap:4}}>
+                    {sh.staffIds.filter(id=>id!==profile.id).slice(0,3).map(id => {
+                      const s = gs(id); return (
+                        <View key={id} style={{width:26,height:26,borderRadius:8,
+                          backgroundColor:(s.c||T.sky)+'25',alignItems:'center',justifyContent:'center'}}>
+                          <Text style={{color:s.c||T.sky,fontSize:10,fontWeight:'800'}}>{s.i||'?'}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
+            </View>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -1067,7 +1152,7 @@ function TeamView({staff, createStaff}) {
 function Nav({role,tab,setTab,onLogout}) {
   const tabs = role==='admin'
     ? [{k:'home',l:'Vardiyalar'},{k:'hours',l:'Saatler'},{k:'team',l:'Ekip'}]
-    : [{k:'home',l:'Vardiyam'},{k:'avail',l:'Müsaitlik'}];
+    : [{k:'home',l:'Vardiyam'},{k:'shifts',l:'Tablo'},{k:'avail',l:'Müsaitlik'},{k:'notif',l:'Bildirim'}];
   return (
     <View style={{backgroundColor:T.s1,borderTopWidth:1,borderTopColor:T.b,
       paddingTop:10,paddingBottom:Platform.OS==='ios'?24:12,paddingHorizontal:24,
