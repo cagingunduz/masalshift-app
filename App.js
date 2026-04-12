@@ -775,11 +775,11 @@ function NotifView({profile, gs, loadShifts}) {
                 <Text style={{color:T.ts,fontSize:14,lineHeight:22}}>
                   <Text style={{color:T.tp,fontWeight:'700'}}>{requester.name}</Text>
                   {' '}
-                  <Text style={{color:T.tp,fontWeight:'600'}}>
+                  <Text style={{color:requester.c||T.sky,fontWeight:'600'}}>
                     {req.requester_shift ? `${DAYS_S[req.requester_shift.day_index]} ${req.requester_shift.start_time}–${req.requester_shift.end_time}` : '—'}
                   </Text>
                   {' vardiyasını senin '}
-                  <Text style={{color:T.tp,fontWeight:'600'}}>
+                  <Text style={{color:gs(profile.id).c||T.acc,fontWeight:'600'}}>
                     {req.target_shift ? `${DAYS_S[req.target_shift.day_index]} ${req.target_shift.start_time}–${req.target_shift.end_time}` : '—'}
                   </Text>
                   {' vardiyanla değiştirmek istiyor.'}
