@@ -280,6 +280,9 @@ export default function App() {
         {session && profile?.role==='admin' && tab==='team' && (
           <TeamView staff={staff} createStaff={createStaff}/>
         )}
+        {session && profile?.role==='admin' && tab==='notif' && (
+          <AdminNotifView gs={gs} loadShifts={loadShifts}/>
+        )}
         {session && profile?.role==='admin' && tab==='hours' && (
           <HoursView staff={staff}/>
         )}
@@ -683,6 +686,127 @@ function StaffHome({sched,gs,profile,weekStart}) {
   );
 }
 
+/* ─── ADMIN NOTIF VIEW ──────────────────────────────────── */
+function AdminNotifView({gs, loadShifts}) {
+  const [requests, setRequests] = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [acting,   setActing]   = useState(null);
+
+  const load = async () => {
+    const { data } = await supabase
+      .from('swap_requests')
+      .select('*, requester_shift:requester_shift_id(start_time,end_time,day_index), target_shift:target_shift_id(start_time,end_time,day_index)')
+      .eq('status', 'staff_approved')
+      .order('created_at', {ascending: false});
+    setRequests(data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const respond = async (req, approve) => {
+    setActing(req.id);
+    if (approve) {
+      await supabase.from('shift_assignments')
+        .delete().eq('shift_id', req.requester_shift_id).eq('staff_id', req.requester_id);
+      await supabase.from('shift_assignments')
+        .insert({shift_id: req.requester_shift_id, staff_id: req.target_id});
+      await supabase.from('shift_assignments')
+        .delete().eq('shift_id', req.target_shift_id).eq('staff_id', req.target_id);
+      await supabase.from('shift_assignments')
+        .insert({shift_id: req.target_shift_id, staff_id: req.requester_id});
+      await loadShifts();
+    }
+    await supabase.from('swap_requests')
+      .update({status: approve ? 'accepted' : 'admin_rejected'})
+      .eq('id', req.id);
+    setActing(null);
+    load();
+  };
+
+  if (loading) return (
+    <View style={{flex:1,justifyContent:'center',alignItems:'center'}}>
+      <ActivityIndicator color={T.acc}/>
+    </View>
+  );
+
+  return (
+    <View style={{flex:1}}>
+      <View style={{padding:20,paddingBottom:12}}>
+        <Text style={{color:T.tp,fontSize:22,fontWeight:'700'}}>Bildirimler</Text>
+        {requests.length>0 &&
+          <Text style={{color:T.ts,fontSize:13,marginTop:3}}>{requests.length} onay bekliyor</Text>}
+      </View>
+      <ScrollView style={{flex:1}} contentContainerStyle={{paddingHorizontal:20,paddingBottom:20,gap:12}}>
+        {requests.length===0 && (
+          <View style={{alignItems:'center',paddingTop:60}}>
+            <Text style={{color:T.tt,fontSize:15}}>Bekleyen onay yok</Text>
+          </View>
+        )}
+        {requests.map(req => {
+          const requester = gs(req.requester_id);
+          const target    = gs(req.target_id);
+          const isActing  = acting === req.id;
+          return (
+            <View key={req.id} style={{backgroundColor:T.s2,borderRadius:20,
+              borderWidth:1,borderColor:T.b,padding:18}}>
+              <View style={{flexDirection:'row',alignItems:'center',gap:12,marginBottom:14}}>
+                <View style={{flexDirection:'row'}}>
+                  {[requester, target].map((p,i) => (
+                    <View key={i} style={{width:40,height:40,borderRadius:12,marginLeft:i>0?-10:0,
+                      backgroundColor:(p.c||T.sky)+'25',alignItems:'center',justifyContent:'center',
+                      borderWidth:2,borderColor:T.s2}}>
+                      <Text style={{color:p.c||T.sky,fontWeight:'800',fontSize:13}}>{p.i||'?'}</Text>
+                    </View>
+                  ))}
+                </View>
+                <View style={{flex:1}}>
+                  <Text style={{color:T.tp,fontWeight:'700',fontSize:15}}>Vardiya Değişim Talebi</Text>
+                  <Text style={{color:T.ts,fontSize:12,marginTop:2}}>
+                    {requester.name} & {target.name} onayladı
+                  </Text>
+                </View>
+              </View>
+
+              <View style={{backgroundColor:T.s3,borderRadius:14,padding:14,marginBottom:14}}>
+                <Text style={{color:T.ts,fontSize:14,lineHeight:22}}>
+                  <Text style={{color:requester.c||T.sky,fontWeight:'700'}}>{requester.name}</Text>
+                  {' '}
+                  <Text style={{color:requester.c||T.sky,fontWeight:'600'}}>
+                    {req.requester_shift ? `${DAYS_S[req.requester_shift.day_index]} ${req.requester_shift.start_time}–${req.requester_shift.end_time}` : '—'}
+                  </Text>
+                  {' ile '}
+                  <Text style={{color:target.c||T.acc,fontWeight:'700'}}>{target.name}</Text>
+                  {'\'ın '}
+                  <Text style={{color:target.c||T.acc,fontWeight:'600'}}>
+                    {req.target_shift ? `${DAYS_S[req.target_shift.day_index]} ${req.target_shift.start_time}–${req.target_shift.end_time}` : '—'}
+                  </Text>
+                  {' vardiyasını değiştirmek istiyor.'}
+                </Text>
+              </View>
+
+              <View style={{flexDirection:'row',gap:10}}>
+                <TouchableOpacity onPress={()=>respond(req,false)} disabled={isActing}
+                  style={{flex:1,backgroundColor:T.erM,borderWidth:1,borderColor:T.er+'40',
+                    borderRadius:14,padding:13,alignItems:'center'}}>
+                  <Text style={{color:T.er,fontWeight:'700',fontSize:14}}>Reddet</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={()=>respond(req,true)} disabled={isActing}
+                  style={{flex:2,backgroundColor:T.okM,borderWidth:1,borderColor:T.ok+'40',
+                    borderRadius:14,padding:13,alignItems:'center'}}>
+                  {isActing
+                    ? <ActivityIndicator color={T.ok} size="small"/>
+                    : <Text style={{color:T.ok,fontWeight:'700',fontSize:14}}>Onayla — Değişimi Uygula</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
 /* ─── NOTIF VIEW ────────────────────────────────────────── */
 function NotifView({profile, gs, loadShifts}) {
   const [requests, setRequests] = useState([]);
@@ -704,19 +828,10 @@ function NotifView({profile, gs, loadShifts}) {
 
   const respond = async (req, accept) => {
     setActing(req.id);
-    if (accept) {
-      // Vardiyaları değiştir
-      await supabase.from('shift_assignments')
-        .delete().eq('shift_id', req.requester_shift_id).eq('staff_id', req.requester_id);
-      await supabase.from('shift_assignments')
-        .insert({shift_id: req.requester_shift_id, staff_id: req.target_id});
-      await supabase.from('shift_assignments')
-        .delete().eq('shift_id', req.target_shift_id).eq('staff_id', req.target_id);
-      await supabase.from('shift_assignments')
-        .insert({shift_id: req.target_shift_id, staff_id: req.requester_id});
-      await loadShifts();
-    }
-    await supabase.from('swap_requests').update({status: accept?'accepted':'rejected'}).eq('id', req.id);
+    // Kabul edince admin onayına gönder, reddetse direkt kapat
+    await supabase.from('swap_requests')
+      .update({status: accept ? 'staff_approved' : 'rejected'})
+      .eq('id', req.id);
     setActing(null);
     load();
   };
@@ -786,6 +901,9 @@ function NotifView({profile, gs, loadShifts}) {
                 </Text>
               </View>
 
+              <Text style={{color:T.tt,fontSize:11,marginBottom:10,textAlign:'center'}}>
+                Onaylarsan yönetici nihai kararı verecek
+              </Text>
               <View style={{flexDirection:'row',gap:10}}>
                 <TouchableOpacity onPress={()=>respond(req,false)} disabled={isActing}
                   style={{flex:1,backgroundColor:T.erM,borderWidth:1,borderColor:T.er+'40',
@@ -1369,7 +1487,7 @@ function TeamView({staff, createStaff}) {
 /* ─── BOTTOM NAV ─────────────────────────────────────────── */
 function Nav({role,tab,setTab,onLogout}) {
   const tabs = role==='admin'
-    ? [{k:'home',l:'Vardiyalar'},{k:'hours',l:'Saatler'},{k:'team',l:'Ekip'}]
+    ? [{k:'home',l:'Vardiyalar'},{k:'hours',l:'Saatler'},{k:'team',l:'Ekip'},{k:'notif',l:'Bildirim'}]
     : [{k:'home',l:'Vardiyam'},{k:'shifts',l:'Tablo'},{k:'avail',l:'Müsaitlik'},{k:'notif',l:'Bildirim'}];
   return (
     <View style={{backgroundColor:T.s1,borderTopWidth:1,borderTopColor:T.b,
