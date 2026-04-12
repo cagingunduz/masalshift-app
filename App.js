@@ -687,18 +687,14 @@ function StaffHome({sched,gs,profile,weekStart}) {
 
 /* ─── SHIFTS TABLE VIEW ─────────────────────────────────── */
 function ShiftsTableView({sched, gs, profile, weekStart, weekOffset, changeWeek}) {
-  const fmt = mins => { const h=Math.floor(mins/60),m=mins%60; return m>0?`${h}s ${m}dk`:`${h}s`; };
   const shMins = sh => { const [h1,m1]=sh.start.split(':').map(Number),[h2,m2]=sh.end.split(':').map(Number); return Math.max(0,(h2*60+m2)-(h1*60+m1)); };
 
-  const myShifts = DAYS_F.map((dayName, i) => ({
+  const days = DAYS_F.map((dayName, i) => ({
     dayName,
     dayNum: getDayNum(weekStart, i),
     idx: i,
-    shifts: (sched[i] || []).filter(sh => sh.staffIds.includes(profile.id)),
+    shifts: (sched[i] || []),
   }));
-
-  const total = myShifts.reduce((acc, d) =>
-    acc + d.shifts.reduce((a, sh) => a + shMins(sh), 0), 0);
 
   return (
     <View style={{flex:1}}>
@@ -714,46 +710,57 @@ function ShiftsTableView({sched, gs, profile, weekStart, weekOffset, changeWeek}
             <Text style={{color:T.ts,fontSize:16}}>›</Text>
           </TouchableOpacity>
         </View>
-        <Text style={{color:T.tp,fontSize:22,fontWeight:'700'}}>Vardiya Tablosu</Text>
-        {total > 0 && <Text style={{color:T.ts,fontSize:13,marginTop:2}}>Bu hafta toplam {fmt(total)}</Text>}
+        <Text style={{color:T.tp,fontSize:22,fontWeight:'700'}}>Haftalık Program</Text>
       </View>
 
       <ScrollView style={{flex:1}} contentContainerStyle={{paddingHorizontal:20,paddingBottom:20,gap:8}}>
-        {myShifts.map(({dayName,dayNum,idx,shifts}) => {
+        {days.map(({dayName,dayNum,idx,shifts}) => {
           const isToday = weekOffset===0 && idx===TODAY_IDX;
           return (
             <View key={idx} style={{backgroundColor:isToday?T.accM:T.s2,borderRadius:16,
               borderWidth:1,borderColor:isToday?T.acc+'40':T.b,overflow:'hidden'}}>
-              <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',
-                paddingHorizontal:16,paddingVertical:12,borderBottomWidth:shifts.length>0?1:0,
-                borderBottomColor:T.b}}>
-                <View style={{flexDirection:'row',alignItems:'center',gap:8}}>
-                  {isToday && <View style={{width:6,height:6,borderRadius:3,backgroundColor:T.acc}}/>}
-                  <Text style={{color:isToday?T.acc:T.tp,fontWeight:'700',fontSize:14}}>{dayName}</Text>
-                  <Text style={{color:T.tt,fontSize:13}}>{dayNum}</Text>
-                </View>
-                {shifts.length===0
-                  ? <Text style={{color:T.tt,fontSize:12}}>—</Text>
-                  : <Text style={{color:T.ts,fontSize:12}}>{fmt(shifts.reduce((a,sh)=>a+shMins(sh),0))}</Text>
-                }
+              <View style={{flexDirection:'row',alignItems:'center',gap:8,
+                paddingHorizontal:16,paddingVertical:12,
+                borderBottomWidth:shifts.length>0?1:0,borderBottomColor:T.b}}>
+                {isToday && <View style={{width:6,height:6,borderRadius:3,backgroundColor:T.acc}}/>}
+                <Text style={{color:isToday?T.acc:T.tp,fontWeight:'700',fontSize:14}}>{dayName}</Text>
+                <Text style={{color:T.tt,fontSize:13}}>{dayNum}</Text>
+                {shifts.length===0 && <Text style={{color:T.tt,fontSize:12,marginLeft:'auto'}}>Vardiya yok</Text>}
               </View>
-              {shifts.map((sh,j) => (
-                <View key={j} style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',
-                  paddingHorizontal:16,paddingVertical:10,
-                  borderBottomWidth:j<shifts.length-1?1:0,borderBottomColor:T.b+'60'}}>
-                  <Text style={{color:T.acc,fontWeight:'700',fontSize:15}}>{sh.start} – {sh.end}</Text>
-                  <View style={{flexDirection:'row',gap:4}}>
-                    {sh.staffIds.filter(id=>id!==profile.id).slice(0,3).map(id => {
-                      const s = gs(id); return (
-                        <View key={id} style={{width:26,height:26,borderRadius:8,
-                          backgroundColor:(s.c||T.sky)+'25',alignItems:'center',justifyContent:'center'}}>
-                          <Text style={{color:s.c||T.sky,fontSize:10,fontWeight:'800'}}>{s.i||'?'}</Text>
-                        </View>
-                      );
-                    })}
+              {shifts.map((sh,j) => {
+                const isMine = sh.staffIds.includes(profile.id);
+                return (
+                  <View key={j} style={{
+                    flexDirection:'row',alignItems:'center',
+                    paddingHorizontal:16,paddingVertical:12,
+                    backgroundColor:isMine?T.acc+'0D':'transparent',
+                    borderBottomWidth:j<shifts.length-1?1:0,borderBottomColor:T.b+'50'}}>
+                    <View style={{width:3,height:36,borderRadius:2,
+                      backgroundColor:isMine?T.acc:T.ts+'40',marginRight:12}}/>
+                    <View style={{flex:1}}>
+                      <Text style={{color:isMine?T.acc:T.tp,fontWeight:'700',fontSize:15}}>
+                        {sh.start} – {sh.end}
+                      </Text>
+                      <View style={{flexDirection:'row',flexWrap:'wrap',gap:4,marginTop:6}}>
+                        {sh.staffIds.map(id => {
+                          const s = gs(id);
+                          const isMe = id === profile.id;
+                          return (
+                            <View key={id} style={{flexDirection:'row',alignItems:'center',gap:5,
+                              backgroundColor:(s.c||T.sky)+(isMe?'30':'15'),
+                              borderRadius:8,paddingVertical:3,paddingHorizontal:8,
+                              borderWidth:isMe?1:0,borderColor:(s.c||T.sky)+'60'}}>
+                              <Text style={{color:s.c||T.sky,fontSize:12,fontWeight:isMe?'700':'500'}}>
+                                {s.name||s.i||'?'}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </View>
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           );
         })}
