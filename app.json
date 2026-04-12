@@ -13,15 +13,26 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.masalshift.app",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "infoPlist": {
+        "UIBackgroundModes": ["remote-notification"]
+      }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#060606"
       },
       "package": "com.masalshift.app",
-      "versionCode": 1
+      "versionCode": 1,
+      "googleServicesFile": "./google-services.json"
     },
+    "plugins": [
+      ["expo-notifications", {
+        "icon": "./assets/icon.png",
+        "color": "#B4A018",
+        "sounds": []
+      }]
+    ],
     "extra": {
       "eas": {
         "projectId": "0bdeddd5-ac9b-427e-9a45-acb2c258acb9"

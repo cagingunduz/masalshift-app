@@ -6,6 +6,35 @@ import {
 } from 'react-native';
 import { createClient } from '@supabase/supabase-js';
 import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './lib/supabase';
+import * as Notifications from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: true,
+  }),
+});
+
+async function registerPushToken() {
+  try {
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== 'granted') return null;
+    const token = (await Notifications.getExpoPushTokenAsync({
+      projectId: '0bdeddd5-ac9b-427e-9a45-acb2c258acb9',
+    })).data;
+    return token;
+  } catch { return null; }
+}
+
+async function sendPush(pushToken, title, body) {
+  if (!pushToken) return;
+  try {
+    await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: pushToken, title, body, sound: 'default' }),
+    });
+  } catch {}
+}
 
 // ── THEME ──────────────────────────────────────────────────
 const GOLD = '#B4A018';
@@ -101,6 +130,11 @@ export default function App() {
     const { data } = await supabase.from('profiles').select('*').eq('id', uid).single();
     setProfile(data);
     setLoading(false);
+    // Push token kaydet
+    const token = await registerPushToken();
+    if (token && token !== data?.push_token) {
+      await supabase.from('profiles').update({ push_token: token }).eq('id', uid);
+    }
   };
 
   const changeWeek = dir => {
@@ -720,6 +754,15 @@ function AdminNotifView({gs, loadShifts}) {
     await supabase.from('swap_requests')
       .update({status: approve ? 'accepted' : 'admin_rejected'})
       .eq('id', req.id);
+    // Her iki personele push gönder
+    const { data: people } = await supabase.from('profiles')
+      .select('id,push_token,name')
+      .in('id', [req.requester_id, req.target_id]);
+    (people || []).forEach(p => {
+      if (p.push_token) sendPush(p.push_token,
+        approve ? 'Vardiya Değişimi Onaylandı' : 'Vardiya Değişimi Reddedildi',
+        approve ? 'Yönetici vardiya değişiminizi onayladı.' : 'Yönetici vardiya değişiminizi reddetti.');
+    });
     setActing(null);
     load();
   };
@@ -828,10 +871,18 @@ function NotifView({profile, gs, loadShifts}) {
 
   const respond = async (req, accept) => {
     setActing(req.id);
-    // Kabul edince admin onayına gönder, reddetse direkt kapat
     await supabase.from('swap_requests')
       .update({status: accept ? 'staff_approved' : 'rejected'})
       .eq('id', req.id);
+    if (accept) {
+      // Admin'e push gönder
+      const { data: admins } = await supabase.from('profiles').select('push_token').eq('role', 'admin');
+      const requester = gs(req.requester_id);
+      (admins || []).forEach(a => {
+        if (a.push_token) sendPush(a.push_token, 'Vardiya Değişim Onayı Bekliyor',
+          `${requester.name} ile ${profile.name} vardiya değiştirmek istiyor. Onay gerekiyor.`);
+      });
+    }
     setActing(null);
     load();
   };
@@ -952,6 +1003,13 @@ function ShiftsTableView({sched, gs, profile, weekStart, weekOffset, changeWeek}
       target_shift_id: modal.targetShift.id,
       week_start: weekStart,
     });
+    // Hedef kişiye push gönder
+    const { data: target } = await supabase.from('profiles').select('push_token').eq('id', modal.targetId).single();
+    if (target?.push_token) {
+      const me = gs(profile.id);
+      sendPush(target.push_token, 'Vardiya Değişim Talebi',
+        `${me.name} seninle vardiya değiştirmek istiyor.`);
+    }
     setSending(false); setSent(true);
     setTimeout(() => { setModal(null); setSent(false); }, 1500);
   };
