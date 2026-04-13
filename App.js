@@ -284,7 +284,7 @@ export default function App() {
 
     const { error: pErr } = await supabase.from('profiles').insert({
       id:data.user.id, name:name.trim(), role:'staff', initials, color, email:fakeEmail,
-      workplace: workplace?.trim() || null,
+      workplace: workplace?.trim() || null, staff_password: password,
     });
     if (pErr) return { error: pErr.message };
     await loadStaff();
@@ -1483,21 +1483,43 @@ function TeamView({staff, createStaff}) {
   const [eSaving,    setESaving]    = useState(false);
   const [eError,     setEError]     = useState('');
 
+  const [eShifre, setEShifre] = useState('');
+
   const openEdit = s => {
     setEditTarget(s);
-    setEName(s.name); setEWorkplace(s.workplace||''); setEColor(s.color); setEPassword(''); setEError('');
+    setEName(s.name); setEWorkplace(s.workplace||''); setEColor(s.color);
+    setEShifre(s.staff_password||''); setEError('');
   };
 
   const saveEdit = async () => {
     if (!eName.trim()) { setEError('İsim zorunlu'); return; }
     setESaving(true); setEError('');
     const initials = eName.trim().split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+
+    // Şifre değiştiyse auth'u güncelle
+    if (eShifre && eShifre !== editTarget.staff_password) {
+      const { data: prof } = await supabase.from('profiles').select('email').eq('id', editTarget.id).single();
+      if (prof?.email) {
+        const tmp = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          auth: { persistSession:false, autoRefreshToken:false },
+        });
+        const { error: signErr } = await tmp.auth.signInWithPassword({
+          email: prof.email, password: editTarget.staff_password,
+        });
+        if (!signErr) {
+          await tmp.auth.updateUser({ password: eShifre });
+        }
+      }
+    }
+
     const { error: pErr } = await supabase.from('profiles').update({
       name: eName.trim(), workplace: eWorkplace.trim()||null, color: eColor, initials,
+      staff_password: eShifre || editTarget.staff_password,
     }).eq('id', editTarget.id);
     if (pErr) { setEError(pErr.message); setESaving(false); return; }
     setESaving(false);
     setEditTarget(null);
+    await loadStaff();
   };
 
   const submit = async () => {
@@ -1593,6 +1615,14 @@ function TeamView({staff, createStaff}) {
                 value={f.val} onChangeText={f.fn} autoCapitalize={f.cap}
               />
             ))}
+
+            <TextInput
+              style={{backgroundColor:T.inp,color:T.tp,borderWidth:1,borderColor:T.b,
+                borderRadius:12,padding:13,fontSize:14,marginBottom:12}}
+              value={eShifre} onChangeText={setEShifre}
+              placeholder="Şifre" placeholderTextColor={T.ts}
+              autoCapitalize="none"
+            />
 
             <Text style={{color:T.ts,fontSize:12,fontWeight:'600',letterSpacing:0.5,marginBottom:10}}>RENK</Text>
             <View style={{flexDirection:'row',flexWrap:'wrap',gap:10,marginBottom:16}}>
