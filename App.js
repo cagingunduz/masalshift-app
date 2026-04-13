@@ -1465,6 +1465,8 @@ function HoursView({staff}) {
 }
 
 /* ─── TEAM VIEW ──────────────────────────────────────────── */
+const STAFF_COLORS = ['#38BDF8','#F472B6','#34D399','#A78BFA','#B4A018','#FB923C','#F87171','#4ADE80'];
+
 function TeamView({staff, createStaff}) {
   const [showForm,   setShowForm]   = useState(false);
   const [name,       setName]       = useState('');
@@ -1472,6 +1474,31 @@ function TeamView({staff, createStaff}) {
   const [password,   setPassword]   = useState('');
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState('');
+
+  // Edit modal
+  const [editTarget, setEditTarget] = useState(null);
+  const [eName,      setEName]      = useState('');
+  const [eWorkplace, setEWorkplace] = useState('');
+  const [eColor,     setEColor]     = useState('');
+  const [eSaving,    setESaving]    = useState(false);
+  const [eError,     setEError]     = useState('');
+
+  const openEdit = s => {
+    setEditTarget(s);
+    setEName(s.name); setEWorkplace(s.workplace||''); setEColor(s.color); setEPassword(''); setEError('');
+  };
+
+  const saveEdit = async () => {
+    if (!eName.trim()) { setEError('İsim zorunlu'); return; }
+    setESaving(true); setEError('');
+    const initials = eName.trim().split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    const { error: pErr } = await supabase.from('profiles').update({
+      name: eName.trim(), workplace: eWorkplace.trim()||null, color: eColor, initials,
+    }).eq('id', editTarget.id);
+    if (pErr) { setEError(pErr.message); setESaving(false); return; }
+    setESaving(false);
+    setEditTarget(null);
+  };
 
   const submit = async () => {
     if (!name||!password) { setError('İsim ve şifre zorunlu'); return; }
@@ -1538,11 +1565,64 @@ function TeamView({staff, createStaff}) {
               {s.role==='admin'?'Yönetici':'Personel'}{s.workplace?` · ${s.workplace}`:''}
             </Text>
           </View>
-          <View style={{backgroundColor:T.okM,borderWidth:1,borderColor:T.ok+'30',borderRadius:9,paddingVertical:4,paddingHorizontal:11}}>
-            <Text style={{color:T.ok,fontSize:11,fontWeight:'700'}}>Aktif</Text>
-          </View>
+          <TouchableOpacity onPress={()=>openEdit(s)}
+            style={{backgroundColor:T.s2,borderWidth:1,borderColor:T.b,
+              borderRadius:9,paddingVertical:5,paddingHorizontal:12}}>
+            <Text style={{color:T.ts,fontSize:12,fontWeight:'600'}}>Düzenle</Text>
+          </TouchableOpacity>
         </View>
       ))}
+
+      {/* EDİT MODAL */}
+      {editTarget && (
+        <View style={{position:'absolute',top:0,left:0,right:0,bottom:0,
+          backgroundColor:'rgba(0,0,0,0.75)',justifyContent:'flex-end'}}>
+          <View style={{backgroundColor:T.s1,borderTopLeftRadius:24,borderTopRightRadius:24,
+            padding:24,paddingBottom:40}}>
+            <View style={{width:36,height:4,backgroundColor:T.b2,borderRadius:2,alignSelf:'center',marginBottom:20}}/>
+            <Text style={{color:T.tp,fontWeight:'700',fontSize:17,marginBottom:16}}>Personeli Düzenle</Text>
+
+            {[
+              {ph:'Ad Soyad',      val:eName,      fn:setEName,      cap:'words'},
+              {ph:'Çalıştığı Yer', val:eWorkplace, fn:setEWorkplace, cap:'words'},
+            ].map((f,i)=>(
+              <TextInput key={i}
+                style={{backgroundColor:T.inp,color:T.tp,borderWidth:1,borderColor:T.b,
+                  borderRadius:12,padding:13,fontSize:14,marginBottom:12}}
+                placeholder={f.ph} placeholderTextColor={T.ts}
+                value={f.val} onChangeText={f.fn} autoCapitalize={f.cap}
+              />
+            ))}
+
+            <Text style={{color:T.ts,fontSize:12,fontWeight:'600',letterSpacing:0.5,marginBottom:10}}>RENK</Text>
+            <View style={{flexDirection:'row',flexWrap:'wrap',gap:10,marginBottom:16}}>
+              {STAFF_COLORS.map(c => (
+                <TouchableOpacity key={c} onPress={()=>setEColor(c)}
+                  style={{width:36,height:36,borderRadius:10,backgroundColor:c+'30',
+                    borderWidth:eColor===c?2.5:1,borderColor:eColor===c?c:T.b,
+                    alignItems:'center',justifyContent:'center'}}>
+                  {eColor===c && <View style={{width:10,height:10,borderRadius:5,backgroundColor:c}}/>}
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {!!eError && <Text style={{color:T.er,fontSize:12,marginBottom:10}}>{eError}</Text>}
+            <View style={{flexDirection:'row',gap:10}}>
+              <TouchableOpacity onPress={()=>setEditTarget(null)}
+                style={{flex:1,backgroundColor:T.s2,borderWidth:1,borderColor:T.b,
+                  borderRadius:14,padding:14,alignItems:'center'}}>
+                <Text style={{color:T.ts,fontWeight:'600'}}>İptal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={saveEdit} disabled={eSaving}
+                style={{flex:2,backgroundColor:T.acc,borderRadius:14,padding:14,alignItems:'center'}}>
+                {eSaving
+                  ? <ActivityIndicator color="#000" size="small"/>
+                  : <Text style={{color:'#000',fontWeight:'700'}}>Kaydet</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </ScrollView>
   );
 }
