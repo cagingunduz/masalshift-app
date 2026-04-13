@@ -1600,9 +1600,13 @@ function TeamView({staff, createStaff}) {
         <View style={{position:'absolute',top:0,left:0,right:0,bottom:0,
           backgroundColor:'rgba(0,0,0,0.75)',justifyContent:'flex-end'}}>
           <View style={{backgroundColor:T.s1,borderTopLeftRadius:24,borderTopRightRadius:24,
-            padding:24,paddingBottom:40}}>
-            <View style={{width:36,height:4,backgroundColor:T.b2,borderRadius:2,alignSelf:'center',marginBottom:20}}/>
-            <Text style={{color:T.tp,fontWeight:'700',fontSize:17,marginBottom:16}}>Personeli Düzenle</Text>
+            maxHeight:'85%'}}>
+            <View style={{padding:24,paddingBottom:0}}>
+              <View style={{width:36,height:4,backgroundColor:T.b2,borderRadius:2,alignSelf:'center',marginBottom:20}}/>
+              <Text style={{color:T.tp,fontWeight:'700',fontSize:17,marginBottom:16}}>Personeli Düzenle</Text>
+            </View>
+            <ScrollView contentContainerStyle={{padding:24,paddingTop:0,paddingBottom:40}}
+              keyboardShouldPersistTaps="handled">
 
             {[
               {ph:'Ad Soyad',      val:eName,      fn:setEName,      cap:'words'},
@@ -1650,6 +1654,7 @@ function TeamView({staff, createStaff}) {
                   : <Text style={{color:'#000',fontWeight:'700'}}>Kaydet</Text>}
               </TouchableOpacity>
             </View>
+            </ScrollView>
           </View>
         </View>
       )}
