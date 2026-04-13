@@ -270,7 +270,7 @@ export default function App() {
     await loadAvail();
   };
 
-  const createStaff = async (name, password) => {
+  const createStaff = async (name, password, workplace) => {
     const fakeEmail = `user_${Date.now()}_${Math.random().toString(36).slice(2,8)}@masalshift.internal`;
     const tmp = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: { persistSession:false, autoRefreshToken:false },
@@ -284,6 +284,7 @@ export default function App() {
 
     const { error: pErr } = await supabase.from('profiles').insert({
       id:data.user.id, name:name.trim(), role:'staff', initials, color, email:fakeEmail,
+      workplace: workplace?.trim() || null,
     });
     if (pErr) return { error: pErr.message };
     await loadStaff();
@@ -552,7 +553,7 @@ function ShiftForm({init,avail,selDay,staff,onSave,onCancel}) {
                   flexDirection:'row',alignItems:'center',gap:8,opacity:blk?0.4:1}}>
                 <Av s={s} size={24}/>
                 <Text style={{color:blk?T.tt:sel?s.color:T.ts,fontSize:12.5,fontWeight:'600'}}>
-                  {s.name.split(' ')[0]}
+                  {s.name.split(' ')[0]}{s.workplace ? ` (${s.workplace})` : ''}
                 </Text>
                 {blk && <Text style={{backgroundColor:T.erM,borderRadius:5,paddingHorizontal:6,paddingVertical:1,color:T.er,fontSize:9,fontWeight:'700'}}>BLOKE</Text>}
                 {!blk && sel && <View style={{width:5,height:5,borderRadius:3,backgroundColor:s.color}}/>}
@@ -1465,18 +1466,19 @@ function HoursView({staff}) {
 
 /* ─── TEAM VIEW ──────────────────────────────────────────── */
 function TeamView({staff, createStaff}) {
-  const [showForm, setShowForm] = useState(false);
-  const [name,     setName]     = useState('');
-  const [password, setPassword] = useState('');
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState('');
+  const [showForm,   setShowForm]   = useState(false);
+  const [name,       setName]       = useState('');
+  const [workplace,  setWorkplace]  = useState('');
+  const [password,   setPassword]   = useState('');
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState('');
 
   const submit = async () => {
     if (!name||!password) { setError('İsim ve şifre zorunlu'); return; }
     setLoading(true); setError('');
-    const result = await createStaff(name, password);
+    const result = await createStaff(name, password, workplace);
     if (result.error) setError(result.error);
-    else { setName(''); setPassword(''); setShowForm(false); }
+    else { setName(''); setWorkplace(''); setPassword(''); setShowForm(false); }
     setLoading(false);
   };
 
@@ -1501,8 +1503,9 @@ function TeamView({staff, createStaff}) {
             <Text style={{color:T.acc,fontSize:10,fontWeight:'700',letterSpacing:1.8,textTransform:'uppercase'}}>YENİ PERSONEL</Text>
           </View>
           {[
-            {ph:'Ad Soyad', val:name,     fn:setName,     cap:'words',  kb:'default'},
-            {ph:'Şifre',    val:password, fn:setPassword, cap:'none',   kb:'default', sec:true},
+            {ph:'Ad Soyad',       val:name,      fn:setName,      cap:'words', kb:'default'},
+            {ph:'Çalıştığı Yer',  val:workplace, fn:setWorkplace, cap:'words', kb:'default'},
+            {ph:'Şifre',          val:password,  fn:setPassword,  cap:'none',  kb:'default', sec:true},
           ].map((f,i)=>(
             <TextInput key={i}
               style={{backgroundColor:T.inp,color:T.tp,borderWidth:1,borderColor:T.b,
@@ -1531,7 +1534,9 @@ function TeamView({staff, createStaff}) {
           </View>
           <View style={{flex:1}}>
             <Text style={{color:T.tp,fontWeight:'600',fontSize:15}}>{s.name}</Text>
-            <Text style={{color:T.ts,fontSize:12,marginTop:2}}>{s.role==='admin'?'Yönetici':'Personel'}</Text>
+            <Text style={{color:T.ts,fontSize:12,marginTop:2}}>
+              {s.role==='admin'?'Yönetici':'Personel'}{s.workplace?` · ${s.workplace}`:''}
+            </Text>
           </View>
           <View style={{backgroundColor:T.okM,borderWidth:1,borderColor:T.ok+'30',borderRadius:9,paddingVertical:4,paddingHorizontal:11}}>
             <Text style={{color:T.ok,fontSize:11,fontWeight:'700'}}>Aktif</Text>
